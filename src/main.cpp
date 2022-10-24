@@ -155,14 +155,14 @@ void overview(float currentLoad, float currentPos, float peakLoad, float minLoad
 
     print_datetime(true);
 
-    printValue("Curr load:", currentLoad, 48, 2, 11);
-    printValue("Curr pos:", currentPos, 48, 3, 11);
+    printValue("Curr load:", currentLoad, 48, 2, 10);
+    printValue("Curr pos:", currentPos, 48, 3, 10);
 
-    printValue("Peak load:", peakLoad, 48, 4, 11);
-    printValue("Min load:", minLoad, 48, 5, 11);
+    printValue("Peak load:", peakLoad, 48, 4, 10);
+    printValue("Min load:", minLoad, 48, 5, 10);
 
-    printValue("Pump Fill:", pumpFill, 48, 4, 11);
-    printValue("SPM:", spm, 48, 5, 11);
+    printValue("Pump Fill:", pumpFill, 48, 4, 10);
+    printValue("SPM:", spm, 48, 5, 10);
 
     float pos_pump = currentPos;
     float load_pump = currentLoad;
