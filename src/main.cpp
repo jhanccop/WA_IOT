@@ -340,6 +340,8 @@ void setup()
     delay(3000);
     lcd_prepare();
 
+    mydisp.backLightOff(); // poweroff led background
+
     currentState();
     delay(5000);
 
