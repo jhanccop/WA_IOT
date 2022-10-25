@@ -17,8 +17,8 @@ const char *fontdir[] = {"0\xb0", "90\xb0", "180\xb0", "270\xb0"};
 /* ====================== MQTT CONFIG ======================== */
 #include <WiFi.h>
 
-String ssid = "";
-String password = "c0l053n5353:20";
+const char *ssid = "JRO-VISITOR";
+const char *password = "";
 
 WiFiClient client;
 #include <PubSubClient.h>
@@ -31,7 +31,8 @@ const char *mqtt_id = "gle_client_234";
 const char *mqtt_user = "gle_client_1";
 const char *mqtt_pass = "gle2022_ttxx";
 
-const char* topicSubscribe = "gle/data/#";
+const char *topicSubscribe = "oilAIOT/setting/#";
+const char *topicPublish = "oilAIOT/data";
 
 /* ========================== TOOLS ========================== */
 #include <Average.h>
@@ -42,8 +43,11 @@ Separador s;
 
 /* ========================== Variables ========================== */
 
-char task = '0';
+String wellName = "Well01";
+
+char task = '3';
 unsigned long now = 0;
+
 float pos_raw[300] = {0.0014, 0.0028, 0.0044, 0.006,
                       0.0083, 0.0107, 0.0135, 0.0163,
                       0.0197, 0.0231, 0.0272, 0.0313,
@@ -180,13 +184,28 @@ float load_raw[300] = {0.3606115, 0.33903414, 0.3922795, 0.4211483, 0.4550223,
                        0.30317277, 0.290632, 0.2333867, 0.2849285, 0.2302016,
                        0.25801674, 0.29357973, 0.3058403, 0.23381004, 0.3365273};
 
+float peakLoad = 0;
+float minLoad = 0;
+float SPM = 0;
+float pumpFill = 0;
+
 /* ************************************************************************************************************** */
 /* ************************************************* FUNCTIONS ************************************************** */
 /* ************************************************************************************************************** */
 
-void mqttCallback(char* topic, byte* payload, unsigned int length);
+void mqttCallback(char *topic, byte *payload, unsigned int length);
 void reconnect();
 
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+
+  StaticJsonDocument<200> doc;
+
+  String json = "";
+  for (int i = 0; i < length; i++)
+  {
+    json += String((char)payload[i]);
+  }
+}
 
 /* ********************** RESET POSITION *********************** */
 void resetpos1(void) // for demo use, reset display position and clean the demo line
@@ -220,7 +239,7 @@ void lcd_prepare(void)
 String print_datetime(boolean show)
 {
     mydisp.setFont(fonts[0]);
-    mydisp.setPrintPos(16, 0, _TEXT_);
+    mydisp.setPrintPos(16, 9, _TEXT_);
     // DateTime now = rtc.now();
     // String year = String(now.year());
     // year.remove(0,2);
@@ -269,13 +288,15 @@ void currentState(void)
     mydisp.clearScreen();
     mydisp.setFont(fonts[0]);
 
-    mydisp.drawStr(8, 0, "CURRENT  STATE");
+    mydisp.drawStr(8, 0, "2. CURRENT  STATE");
     mydisp.drawLine(0, 6, 127, 6);
 
     printValue("Pump Fillage (%):", 90.78, 1, 2, 25);
     printValue("Pumping speed (spm):", 13.48, 1, 3, 25);
+
     printValue("Production today (bbl):", 124.56, 1, 5, 25);
     printValue("Tomorrow project (bbl):", 125.32, 1, 6, 25);
+
     printValue("Run Time today (hours):", 17.59, 1, 8, 25);
 }
 
@@ -289,7 +310,7 @@ void valueOverview(float value, int pos_x, int pos_y)
 
     mydisp.setPrintPos(pos_x, pos_y, _TEXT_);
     delay(50);
-    mydisp.print(value);
+    mydisp.print(String(value, 1));
     // delay(25);
 }
 
@@ -297,6 +318,10 @@ void backgorund()
 {
     mydisp.clearScreen();
     mydisp.setFont(fonts[0]);
+
+    // Title
+    mydisp.drawStr(18, 0, "3. REAL TIME");
+    mydisp.drawHLine(65, 6, 62);
 
     // print datetime
     print_datetime(true);
@@ -306,32 +331,35 @@ void backgorund()
     mydisp.drawVLine(0, 0, 63);
 
     // print labels
-    mydisp.setPrintPos(51, 2, _TEXT_);
+    mydisp.setPrintPos(19, 2, _TEXT_);
     mydisp.print("Load");
 
-    mydisp.setPrintPos(52, 3, _TEXT_);
+    mydisp.setPrintPos(20, 3, _TEXT_);
     mydisp.print("Pos");
 
-    mydisp.setPrintPos(49, 4, _TEXT_);
-    mydisp.print("P Load");
+    mydisp.setPrintPos(18, 4, _TEXT_);
+    mydisp.print("PLoad");
 
-    mydisp.setPrintPos(49, 5, _TEXT_);
-    mydisp.print("m Load");
+    mydisp.setPrintPos(18, 5, _TEXT_);
+    mydisp.print("mLoad");
 
-    mydisp.setPrintPos(49, 6, _TEXT_);
-    mydisp.print("P fill");
+    mydisp.setPrintPos(18, 6, _TEXT_);
+    mydisp.print("Pfill");
 
-    mydisp.setPrintPos(52, 7, _TEXT_);
+    mydisp.setPrintPos(20, 7, _TEXT_);
     mydisp.print("SPM");
 
-    valueOverview(12, 56, 4);
-    valueOverview(12, 56, 5);
+    valueOverview(peakLoad, 24, 4);
+    valueOverview(minLoad, 24, 5);
 
-    valueOverview(12.54, 56, 6);
-    valueOverview(12.4, 56, 7);
+    valueOverview(pumpFill, 24, 6);
+    valueOverview(SPM, 24, 7);
 }
 
+/* *************************************************************************** */
 /* ************************* LCD 3 OVERVIEW REAL TIME ************************ */
+/* *************************************************************************** */
+
 void plotOverview(float pos, float load, float pos_pump, float load_pump)
 {
     int x_surf = map(pos * 100, 0, 100, 5, 60);
@@ -345,14 +373,26 @@ void plotOverview(float pos, float load, float pos_pump, float load_pump)
 
 void overview()
 {
-    // mydisp.clearScreen();
-    // mydisp.setFont(fonts[0]);
     int count = 0;
     float currentLoad, currentPos;
 
     backgorund();
+
+    int flag = 0;
+    int collect = 0;
+
+    Average<float> pay_pos(300);
+    Average<float> pay_load(300);
+
+    // variables
+    int min_index = 0;
+    int max_index = 0;
+    
+    int counter = 0;
+
     while (task == '3')
     {
+        // CHECK KEYBOARD TO CHANGE MENU
         Serial.println("overview");
         if (Serial.available() > 0)
         {
@@ -363,77 +403,147 @@ void overview()
             }
         }
 
-        currentLoad = load_raw[count];
+        // READ SENSORS
         currentPos = pos_raw[count];
-        if( count % 5 == 0 ){
-            valueOverview(currentLoad, 56, 2);
-            valueOverview(currentPos, 56, 3);
+
+        // VERIFY START COLLECT POINT (DOWN POINT)
+        if (flag == 0 && currentPos < 0.01)
+        {
+            flag = 1;
+            collect = 1;
+        }
+        else if (flag == 1 && currentPos > 1.99)
+        {
+            flag = 2;
+        }
+        else if (flag == 2 && currentPos < 0.01)
+        {
+            flag = 0;
+            collect = 0;
+            break;
         }
 
-        float pos_pump = currentPos;
-        float load_pump = currentLoad;
+        // COLLECT
+        if (collect)
+        {
+            currentLoad = load_raw[count];
 
-        plotOverview(currentPos, currentLoad, pos_pump, load_pump);
+            // PRINT VALUES ON DISPLAY
+            if (counter % 5 == 0)
+            {
+                valueOverview(currentLoad, 24, 2);
+                valueOverview(currentPos, 24, 3);
+            }
+
+            float pos_pump = currentPos;
+            float load_pump = currentLoad;
+
+            plotOverview(currentPos, currentLoad, pos_pump, load_pump);
+
+            counter += 1;
+
+            // COLLECT DATA
+            pay_pos.push(currentPos);
+            pay_load.push(currentLoad);
+
+        }
+
+        if (count == 300)
+        {
+            count = 0;
+            backgorund();
+        }
 
         count += 1;
-        if(count == 300){
-            count=0;
-            backgorund();
-            }
 
         delay(150);
     }
 
-    //valueOverview(currentLoad, 56, 2);
-    // delay(50);
-    //valueOverview(currentPos, 56, 3);
-    // delay(50);
+    // PROCESS
+    peakLoad = pay_load.maximum(&max_index);
+    minLoad = pay_load.maximum(&min_index);
+    SPM = 60*4/counter;
+
+    valueOverview(peakLoad, 24, 4);
+    valueOverview(minLoad, 24, 5);
+    valueOverview(SPM, 24, 7);
+
+    String mqtt_load = "";
+    String mqtt_pos = "";
+
     
-}
-
-/* ************************* PLOTTER ************************ 
-void plotter()
-{
-
-    int n_data = 300;
-    yield();
-
-    // int pos_i = map(pos_raw[0] * 100, 0, 100, 2, 69);
-    // int load_i = map(load_raw[0] * 100, 0, 100, 63, 10);
-
-    for (int i = 0; i < n_data; i++)
-    {
-
-        if (millis() > now + 50){
-            now = millis();
-            overview(load_raw[i], pos_raw[i]);
-        }
-        //overview(load_raw[i], pos_raw[i]);
-        // int x = analogRead(34);
-        // int y = analogRead(39);
-        // overview(x, y);
-        // delay(200);
+    for (int i = 0; i < counter; i++) {
+        mqtt_pos += String(pay_pos.get(i),3) + ",";
+        mqtt_load += String(pay_load.get(i),3) + ",";
     }
+    
+    String mqtt_payload = "{\"Id\":\"" + wellName + "\",\"DataProcess\":[" + String(peakLoad,2) + "," + String(minLoad,2) + "," + String(pumpFill,2) + "," + String(SPM,2) + "],\"pos\":\"" + mqtt_pos + "\",\"load\":\"" + mqtt_load + "}";
+    
+    char payload[1000];
+    mqtt_payload.toCharArray(payload, (mqtt_payload.length() + 1));
+    
+    reconnect();
+    Serial.println(mqtt_payload);
+    mqtt.publish(topicPublish,payload);
+
+    // valueOverview(currentLoad, 56, 2);
+    //  delay(50);
+    // valueOverview(currentPos, 56, 3);
+    //  delay(50);
+
 }
-
-*/
-
 
 /* ******************* RECONNECT  ********************** */
-void reconnect() {
-  // Loop until we're reconnected
-  while (!mqtt.connected()) {
-    //Serial.print("Attempting MQTT connection...");
-    //mqtt.publish(topicInit_pub,"reconnect");
-    // Attempt to connect
+void reconnect()
+{
+    // Loop until we're reconnected
+    while (!mqtt.connected())
+    {
+        // Serial.print("Attempting MQTT connection...");
+        // mqtt.publish(topicInit_pub,"reconnect");
+        //  Attempt to connect
 
-    if (mqtt.connect(mqtt_id, mqtt_user, mqtt_pass)) {
-      mqtt.subscribe(topicSubscribe);
-    } else {
-
-      delay(5000);
+        if (mqtt.connect(mqtt_id, mqtt_user, mqtt_pass))
+        {
+            mqtt.subscribe(topicSubscribe);
+            mqtt.publish(topicPublish,"Connect");
+        }
+        else
+        {
+            delay(5000);
+        }
     }
+}
+
+/* ************************* SETUP WIFI ************************** */
+void setup_wifi() {
+
+  //char ssidC[150];
+  //ssid = String(EEPROM.readString(ssid_address));
+  //ssid.toCharArray(ssidC, (ssid.length() + 1));
+
+  //char passwordC[150];
+  //password = EEPROM.readString(pass_address);
+  //password.toCharArray(passwordC, (password.length() + 1));
+
+  WiFi.begin(ssid, password);
+  delay(100);
+  while (WiFi.status() != WL_CONNECTED) {
+    //char ssidC[150];
+    //ssid = String(EEPROM.readString(ssid_address));
+    //ssid.toCharArray(ssidC, (ssid.length() + 1));
+
+    //char passwordC[150];
+    //password = EEPROM.readString(pass_address);
+    //password.toCharArray(passwordC, (password.length() + 1));
+    
+    //Serial.print(ssid);
+    //Serial.println(password);
+    //print_manintance("connect wifi");
+    delay(1500);
   }
+
+  delay(2000);
 }
 
 /* ******************* SETUP  ********************** */
@@ -449,16 +559,17 @@ void setup()
     currentState();
     delay(5000);
 
-    // mydisp.clearScreen();
-    // mydisp.setFont(fonts[0]);
+    setup_wifi();
 
-    // print_datetime(true);
-    // print_SPM(6.64);
-    // print_CLASS("FLUID POUND");
-    // backgorund();
-    // plotter();
-    // print_state("Local", "2", "run");
-    // Serial.begin(115200);
+    mqtt.setServer(broker, mqtt_port);
+    mqtt.setCallback(mqttCallback);
+
+    /* **************** INIT AND SET RTC ********************* */
+    if (mqtt.connect(mqtt_id))//, mqtt_user, mqtt_pass))
+    {
+        // mqtt.publish(topicInit_pub,"start");
+        mqtt.subscribe(topicSubscribe);
+    }
 }
 
 void loop()
@@ -466,31 +577,31 @@ void loop()
     if (Serial.available() > 0)
     {
         char key = Serial.read();
-        if(key != '\n'){
+        if (key != '\n')
+        {
             task = key;
         }
-        
     }
-    switch(task)
+    switch (task)
     {
-        case '0':
-            Serial.println("task 0");
-            break;
-        case  '1':
-            Serial.println("task 1");
-            break;
-        case  '2':
-            Serial.println("task 2");
-            break;
-        case  '3':
-            Serial.println("task 3");
-            overview();
-            break;
-        default:
-            Serial.println("Default");
+    case '0':
+        Serial.println("task 0");
+        break;
+    case '1':
+        Serial.println("task 1");
+        break;
+    case '2':
+        Serial.println("task 2");
+        break;
+    case '3':
+        Serial.println("task 3");
+        overview();
+        break;
+    default:
+        Serial.println("Default");
     }
 
-    //backgorund();
-    //plotter();
-    //delay(3000);
+    // backgorund();
+    // plotter();
+    // delay(3000);
 }
