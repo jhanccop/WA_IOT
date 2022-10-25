@@ -10,11 +10,13 @@
             "includePath": [
                 "/Users/jh/Documents/arduinoCode/oil_and_gas/WA_IOT/include",
                 "/Users/jh/Documents/arduinoCode/oil_and_gas/WA_IOT/src",
+                "/Users/jh/.platformio/packages/framework-arduinoespressif32/libraries/WiFi/src",
                 "/Users/jh/Documents/arduinoCode/oil_and_gas/WA_IOT/lib/separador",
                 "/Users/jh/Documents/arduinoCode/oil_and_gas/WA_IOT/lib/PubSubClient/src",
                 "/Users/jh/Documents/arduinoCode/oil_and_gas/WA_IOT/lib/DigoleSerial",
                 "/Users/jh/.platformio/packages/framework-arduinoespressif32/libraries/Wire/src",
                 "/Users/jh/Documents/arduinoCode/oil_and_gas/WA_IOT/lib/Average-master",
+                "/Users/jh/Documents/arduinoCode/oil_and_gas/WA_IOT/lib/ArduinoJson-6.x/src",
                 "/Users/jh/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/newlib/platform_include",
                 "/Users/jh/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include",
                 "/Users/jh/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include/esp_additions/freertos",
@@ -235,7 +237,6 @@
                 "/Users/jh/.platformio/packages/framework-arduinoespressif32/libraries/USB/src",
                 "/Users/jh/.platformio/packages/framework-arduinoespressif32/libraries/Update/src",
                 "/Users/jh/.platformio/packages/framework-arduinoespressif32/libraries/WebServer/src",
-                "/Users/jh/.platformio/packages/framework-arduinoespressif32/libraries/WiFi/src",
                 "/Users/jh/.platformio/packages/framework-arduinoespressif32/libraries/WiFiClientSecure/src",
                 "/Users/jh/.platformio/packages/framework-arduinoespressif32/libraries/WiFiProv/src",
                 ""
@@ -245,11 +246,13 @@
                 "path": [
                     "/Users/jh/Documents/arduinoCode/oil_and_gas/WA_IOT/include",
                     "/Users/jh/Documents/arduinoCode/oil_and_gas/WA_IOT/src",
+                    "/Users/jh/.platformio/packages/framework-arduinoespressif32/libraries/WiFi/src",
                     "/Users/jh/Documents/arduinoCode/oil_and_gas/WA_IOT/lib/separador",
                     "/Users/jh/Documents/arduinoCode/oil_and_gas/WA_IOT/lib/PubSubClient/src",
                     "/Users/jh/Documents/arduinoCode/oil_and_gas/WA_IOT/lib/DigoleSerial",
                     "/Users/jh/.platformio/packages/framework-arduinoespressif32/libraries/Wire/src",
                     "/Users/jh/Documents/arduinoCode/oil_and_gas/WA_IOT/lib/Average-master",
+                    "/Users/jh/Documents/arduinoCode/oil_and_gas/WA_IOT/lib/ArduinoJson-6.x/src",
                     "/Users/jh/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/newlib/platform_include",
                     "/Users/jh/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include",
                     "/Users/jh/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/freertos/include/esp_additions/freertos",
@@ -470,7 +473,6 @@
                     "/Users/jh/.platformio/packages/framework-arduinoespressif32/libraries/USB/src",
                     "/Users/jh/.platformio/packages/framework-arduinoespressif32/libraries/Update/src",
                     "/Users/jh/.platformio/packages/framework-arduinoespressif32/libraries/WebServer/src",
-                    "/Users/jh/.platformio/packages/framework-arduinoespressif32/libraries/WiFi/src",
                     "/Users/jh/.platformio/packages/framework-arduinoespressif32/libraries/WiFiClientSecure/src",
                     "/Users/jh/.platformio/packages/framework-arduinoespressif32/libraries/WiFiProv/src",
                     ""
