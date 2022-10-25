@@ -31,7 +31,7 @@ const char *mqtt_id = "gle_client_234";
 const char *mqtt_user = "gle_client_1";
 const char *mqtt_pass = "gle2022_ttxx";
 
-const char* topicSirenStatus_subs = "gle/data/#";
+const char* topicSubscribe = "gle/data/#";
 
 /* ========================== TOOLS ========================== */
 #include <Average.h>
@@ -42,8 +42,8 @@ Separador s;
 
 /* ========================== Variables ========================== */
 
-int task = 0;
-
+char task = '0';
+unsigned long now = 0;
 float pos_raw[300] = {0.0014, 0.0028, 0.0044, 0.006,
                       0.0083, 0.0107, 0.0135, 0.0163,
                       0.0197, 0.0231, 0.0272, 0.0313,
@@ -284,7 +284,7 @@ void currentState(void)
 void valueOverview(float value, int pos_x, int pos_y)
 {
     mydisp.setPrintPos(pos_x, pos_y, _TEXT_);
-    delay(250);
+    delay(50);
     mydisp.print("       ");
 
     mydisp.setPrintPos(pos_x, pos_y, _TEXT_);
@@ -343,22 +343,55 @@ void plotOverview(float pos, float load, float pos_pump, float load_pump)
     mydisp.drawPixel(x_pump, y_pump);
 }
 
-void overview(float currentLoad, float currentPos)
+void overview()
 {
     // mydisp.clearScreen();
     // mydisp.setFont(fonts[0]);
+    int count = 0;
+    float currentLoad, currentPos;
 
-    valueOverview(currentLoad, 56, 2);
-    // delay(50);
-    valueOverview(currentPos, 56, 3);
-    // delay(50);
-    float pos_pump = currentPos;
-    float load_pump = currentLoad;
+    backgorund();
+    while (task == '3')
+    {
+        Serial.println("overview");
+        if (Serial.available() > 0)
+        {
+            char key = Serial.read();
+            if (key != '\n')
+            {
+                task = key;
+            }
+        }
 
-    plotOverview(currentPos, currentLoad, pos_pump, load_pump);
+        currentLoad = load_raw[count];
+        currentPos = pos_raw[count];
+        if( count % 5 == 0 ){
+            valueOverview(currentLoad, 56, 2);
+            valueOverview(currentPos, 56, 3);
+        }
+
+        float pos_pump = currentPos;
+        float load_pump = currentLoad;
+
+        plotOverview(currentPos, currentLoad, pos_pump, load_pump);
+
+        count += 1;
+        if(count == 300){
+            count=0;
+            backgorund();
+            }
+
+        delay(150);
+    }
+
+    //valueOverview(currentLoad, 56, 2);
+    // delay(50);
+    //valueOverview(currentPos, 56, 3);
+    // delay(50);
+    
 }
 
-/* ************************* PLOTTER ************************ */
+/* ************************* PLOTTER ************************ 
 void plotter()
 {
 
@@ -371,22 +404,19 @@ void plotter()
     for (int i = 0; i < n_data; i++)
     {
 
-        overview(load_raw[i], pos_raw[i]);
+        if (millis() > now + 50){
+            now = millis();
+            overview(load_raw[i], pos_raw[i]);
+        }
+        //overview(load_raw[i], pos_raw[i]);
         // int x = analogRead(34);
         // int y = analogRead(39);
         // overview(x, y);
-        /*
-        float pos_f = map(pos_raw[i]*100,0,100,2,69);//int(pos[i] * 100) + 6;
-        int load_f = map(load_raw[i]*100,0,100,63,10);
-
-        mydisp.drawLine(pos_i, load_i, pos_f, load_f);
-
-        pos_i = pos_f;
-        load_i = load_f;
-        */
         // delay(200);
     }
 }
+
+*/
 
 
 /* ******************* RECONNECT  ********************** */
@@ -398,15 +428,9 @@ void reconnect() {
     // Attempt to connect
 
     if (mqtt.connect(mqtt_id, mqtt_user, mqtt_pass)) {
-      //Serial.println("connected");
-      mqtt.subscribe(topicSirenStatus_subs);
-      //print_manintance("connected");
+      mqtt.subscribe(topicSubscribe);
     } else {
-      //Serial.print("failed, rc=");
-      //Serial.print(mqtt.state());
-      //Serial.println(" try again in 5 seconds");
-      // Wait 5 seconds before retrying
-      //print_manintance("failed");
+
       delay(5000);
     }
   }
@@ -415,6 +439,7 @@ void reconnect() {
 /* ******************* SETUP  ********************** */
 void setup()
 {
+    Serial.begin(9600);
     mydisp.begin();
     delay(3000);
     lcd_prepare();
@@ -438,7 +463,34 @@ void setup()
 
 void loop()
 {
-    backgorund();
-    plotter();
-    delay(3000);
+    if (Serial.available() > 0)
+    {
+        char key = Serial.read();
+        if(key != '\n'){
+            task = key;
+        }
+        
+    }
+    switch(task)
+    {
+        case '0':
+            Serial.println("task 0");
+            break;
+        case  '1':
+            Serial.println("task 1");
+            break;
+        case  '2':
+            Serial.println("task 2");
+            break;
+        case  '3':
+            Serial.println("task 3");
+            overview();
+            break;
+        default:
+            Serial.println("Default");
+    }
+
+    //backgorund();
+    //plotter();
+    //delay(3000);
 }
