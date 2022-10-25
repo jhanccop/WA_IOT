@@ -17,7 +17,7 @@ const char *fontdir[] = {"0\xb0", "90\xb0", "180\xb0", "270\xb0"};
 /* ====================== MQTT CONFIG ======================== */
 #include <WiFi.h>
 
-String ssid = "Hora De Estudiar-2.4GHz";
+String ssid = "";
 String password = "c0l053n5353:20";
 
 WiFiClient client;
