@@ -25,11 +25,12 @@ WiFiClient client;
 
 PubSubClient mqtt(client);
 
-const char *broker = "broker.emqx.io";
+//const char *broker = "broker.emqx.io";
+const char *broker = "broker.hivemq.com";
 const int mqtt_port = 1883;
 const char *mqtt_id = "gle_client_234";
-const char *mqtt_user = "gle_client_1";
-const char *mqtt_pass = "gle2022_ttxx";
+const char *mqtt_user = "gle";
+const char *mqtt_pass = "glettxx";
 
 const char *topicSubscribe = "oilAIOT/setting/#";
 const char *topicPublish = "oilAIOT/data";
@@ -44,6 +45,7 @@ Separador s;
 /* ========================== Variables ========================== */
 
 String wellName = "Well01";
+long int idT = 0;
 
 char task = '3';
 unsigned long now = 0;
@@ -196,15 +198,26 @@ float pumpFill = 0;
 void mqttCallback(char *topic, byte *payload, unsigned int length);
 void reconnect();
 
-void mqttCallback(char* topic, byte* payload, unsigned int length) {
+void mqttCallback(char *topic, byte *payload, unsigned int length)
+{
 
-  StaticJsonDocument<200> doc;
+    StaticJsonDocument<200> doc;
 
-  String json = "";
-  for (int i = 0; i < length; i++)
-  {
-    json += String((char)payload[i]);
-  }
+    String json = "";
+    for (int i = 0; i < length; i++)
+    {
+        json += String((char)payload[i]);
+    }
+}
+
+void sendData(String mqtt_payload)
+{
+    char payload[500];
+    mqtt_payload.toCharArray(payload, (mqtt_payload.length() + 1));
+    reconnect();
+    mqtt.publish(topicPublish, payload);
+    Serial.println("------>");
+    Serial.println(mqtt_payload);
 }
 
 /* ********************** RESET POSITION *********************** */
@@ -387,13 +400,13 @@ void overview()
     // variables
     int min_index = 0;
     int max_index = 0;
-    
+
     int counter = 0;
 
     while (task == '3')
     {
         // CHECK KEYBOARD TO CHANGE MENU
-        Serial.println("overview");
+        
         if (Serial.available() > 0)
         {
             char key = Serial.read();
@@ -412,7 +425,7 @@ void overview()
             flag = 1;
             collect = 1;
         }
-        else if (flag == 1 && currentPos > 1.99)
+        else if (flag == 1 && currentPos > 0.99)
         {
             flag = 2;
         }
@@ -433,6 +446,7 @@ void overview()
             {
                 valueOverview(currentLoad, 24, 2);
                 valueOverview(currentPos, 24, 3);
+                Serial.println("overview");
             }
 
             float pos_pump = currentPos;
@@ -440,12 +454,11 @@ void overview()
 
             plotOverview(currentPos, currentLoad, pos_pump, load_pump);
 
-            counter += 1;
+            counter++;
 
             // COLLECT DATA
             pay_pos.push(currentPos);
             pay_load.push(currentLoad);
-
         }
 
         if (count == 300)
@@ -454,43 +467,52 @@ void overview()
             backgorund();
         }
 
-        count += 1;
+        count++;
 
         delay(150);
     }
 
     // PROCESS
     peakLoad = pay_load.maximum(&max_index);
-    minLoad = pay_load.maximum(&min_index);
-    SPM = 60*4/counter;
+    minLoad = pay_load.minimum(&min_index);
+    SPM = (60*4)/float(counter);
 
     valueOverview(peakLoad, 24, 4);
     valueOverview(minLoad, 24, 5);
     valueOverview(SPM, 24, 7);
+    Serial.println(peakLoad);
+    Serial.println(minLoad);
+    Serial.println(SPM);
+    Serial.println(counter);
 
-    String mqtt_load = "";
-    String mqtt_pos = "";
+    String mqtt_payload = "{\"Well\":\"" + wellName + "\",\"idT\":" + String(idT) + ",\"Data\":[" + String(peakLoad, 2) + "," + String(minLoad, 2) + "," + String(pumpFill, 2) + "," + String(SPM, 2) + "]}";
+    sendData(mqtt_payload);
 
+    String rawdata = "";
     
-    for (int i = 0; i < counter; i++) {
-        mqtt_pos += String(pay_pos.get(i),3) + ",";
-        mqtt_load += String(pay_load.get(i),3) + ",";
+    for (int i = 0; i < counter; i++)
+    {
+        rawdata += String(pay_pos.get(i), 3) + ",";
     }
+    mqtt_payload = "{\"Well\":\"" + wellName + "\",\"idT\":" + String(idT) + ",\"pos\":\"" + rawdata + "\"}";
+    sendData(mqtt_payload);
+    /*
+    for (int i = 0; i < counter; i++)
+    {
+        rawdata += String(pay_load.get(i), 3) + ",";
+    }
+    */
+    mqtt_payload = "{\"Well\":\"" + wellName + "\",\"idT\":" + String(idT) + ",\"pos\":\"" + rawdata + "\"}";
+    sendData(mqtt_payload);
     
-    String mqtt_payload = "{\"Id\":\"" + wellName + "\",\"DataProcess\":[" + String(peakLoad,2) + "," + String(minLoad,2) + "," + String(pumpFill,2) + "," + String(SPM,2) + "],\"pos\":\"" + mqtt_pos + "\",\"load\":\"" + mqtt_load + "}";
-    
-    char payload[1000];
-    mqtt_payload.toCharArray(payload, (mqtt_payload.length() + 1));
-    
-    reconnect();
-    Serial.println(mqtt_payload);
-    mqtt.publish(topicPublish,payload);
+    // String mqtt_payload = "{\"Id\":\"" + wellName + "\",\"DataProcess\":[" + String(peakLoad,2) + "," + String(minLoad,2) + "," + String(pumpFill,2) + "," + String(SPM,2) + "],\"pos\":\"" + mqtt_pos + "\",\"load\":\"" + mqtt_load + "}";
+
+    idT++;
 
     // valueOverview(currentLoad, 56, 2);
     //  delay(50);
     // valueOverview(currentPos, 56, 3);
     //  delay(50);
-
 }
 
 /* ******************* RECONNECT  ********************** */
@@ -499,14 +521,13 @@ void reconnect()
     // Loop until we're reconnected
     while (!mqtt.connected())
     {
-        // Serial.print("Attempting MQTT connection...");
-        // mqtt.publish(topicInit_pub,"reconnect");
-        //  Attempt to connect
+        Serial.print("Attempting MQTT connection...");
 
         if (mqtt.connect(mqtt_id, mqtt_user, mqtt_pass))
+        //if (mqtt.connect(mqtt_id))
         {
             mqtt.subscribe(topicSubscribe);
-            mqtt.publish(topicPublish,"Connect");
+            mqtt.publish(topicPublish, "Connect");
         }
         else
         {
@@ -516,34 +537,36 @@ void reconnect()
 }
 
 /* ************************* SETUP WIFI ************************** */
-void setup_wifi() {
+void setup_wifi()
+{
 
-  //char ssidC[150];
-  //ssid = String(EEPROM.readString(ssid_address));
-  //ssid.toCharArray(ssidC, (ssid.length() + 1));
+    // char ssidC[150];
+    // ssid = String(EEPROM.readString(ssid_address));
+    // ssid.toCharArray(ssidC, (ssid.length() + 1));
 
-  //char passwordC[150];
-  //password = EEPROM.readString(pass_address);
-  //password.toCharArray(passwordC, (password.length() + 1));
+    // char passwordC[150];
+    // password = EEPROM.readString(pass_address);
+    // password.toCharArray(passwordC, (password.length() + 1));
 
-  WiFi.begin(ssid, password);
-  delay(100);
-  while (WiFi.status() != WL_CONNECTED) {
-    //char ssidC[150];
-    //ssid = String(EEPROM.readString(ssid_address));
-    //ssid.toCharArray(ssidC, (ssid.length() + 1));
+    WiFi.begin(ssid, password);
+    delay(100);
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        // char ssidC[150];
+        // ssid = String(EEPROM.readString(ssid_address));
+        // ssid.toCharArray(ssidC, (ssid.length() + 1));
 
-    //char passwordC[150];
-    //password = EEPROM.readString(pass_address);
-    //password.toCharArray(passwordC, (password.length() + 1));
-    
-    //Serial.print(ssid);
-    //Serial.println(password);
-    //print_manintance("connect wifi");
-    delay(1500);
-  }
+        // char passwordC[150];
+        // password = EEPROM.readString(pass_address);
+        // password.toCharArray(passwordC, (password.length() + 1));
 
-  delay(2000);
+        Serial.print(ssid);
+        // Serial.println(password);
+        // print_manintance("connect wifi");
+        delay(1500);
+    }
+
+    delay(2000);
 }
 
 /* ******************* SETUP  ********************** */
@@ -565,15 +588,22 @@ void setup()
     mqtt.setCallback(mqttCallback);
 
     /* **************** INIT AND SET RTC ********************* */
-    if (mqtt.connect(mqtt_id))//, mqtt_user, mqtt_pass))
+    if (mqtt.connect(mqtt_id, mqtt_user, mqtt_pass))
     {
-        // mqtt.publish(topicInit_pub,"start");
+        mqtt.publish(topicPublish, "start");
         mqtt.subscribe(topicSubscribe);
     }
 }
 
 void loop()
 {
+    if (!mqtt.connected())
+    {
+        reconnect();
+    }
+
+    mqtt.loop();
+
     if (Serial.available() > 0)
     {
         char key = Serial.read();
@@ -582,6 +612,7 @@ void loop()
             task = key;
         }
     }
+
     switch (task)
     {
     case '0':
