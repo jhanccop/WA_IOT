@@ -2,9 +2,16 @@
 UBM analyzer version for unipetro abc
 */
 
-/* ====================== LCD CONFIG ======================== */
 #include <Arduino.h>
 
+/* ====================== DEEP SLEEP CONFIG ======================== */
+
+#define uS_TO_S_FACTOR 1000000
+#define TIME_TO_SLEEP  120
+
+RTC_DATA_ATTR int idT = 0;
+
+/* ====================== LCD CONFIG ======================== */
 #define _Digole_Serial_I2C_
 #include <DigoleSerial.h>
 
@@ -42,10 +49,10 @@ const char *topicPublish = "oilAIOT/data";
 
 Separador s;
 
-/* ========================== Variables ========================== */
+/* ========================== OPERATION VARIABLES ========================== */
 
 String wellName = "Well01";
-long int idT = 0;
+//long int idT = 0;
 
 char task = '3';
 unsigned long now = 0;
@@ -188,8 +195,15 @@ float load_raw[300] = {0.3606115, 0.33903414, 0.3922795, 0.4211483, 0.4550223,
 
 float peakLoad = 0;
 float minLoad = 0;
+
+float maxPos = 0;
+float minPos = 0;
+
 float SPM = 0;
 float pumpFill = 0;
+
+/* ========================== FIXED VARIABLES ========================== */
+float length = 1;
 
 /* ************************************************************************************************************** */
 /* ************************************************* FUNCTIONS ************************************************** */
@@ -208,13 +222,37 @@ void mqttCallback(char *topic, byte *payload, unsigned int length)
     {
         json += String((char)payload[i]);
     }
+    Serial.println(json);
 }
 
+/* ********************** WAKEUP REASON *********************** */
+
+void print_wakeup_reason(){
+  esp_sleep_wakeup_cause_t wakeup_reason;
+
+  wakeup_reason = esp_sleep_get_wakeup_cause();
+
+  switch(wakeup_reason)
+  {
+    case ESP_SLEEP_WAKEUP_EXT0 : Serial.println("Wakeup caused by external signal using RTC_IO"); break;
+    case ESP_SLEEP_WAKEUP_EXT1 : Serial.println("Wakeup caused by external signal using RTC_CNTL"); break;
+    case ESP_SLEEP_WAKEUP_TIMER : Serial.println("Wakeup caused by timer"); break;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD : Serial.println("Wakeup caused by touchpad"); break;
+    case ESP_SLEEP_WAKEUP_ULP : Serial.println("Wakeup caused by ULP program"); break;
+    default : Serial.printf("Wakeup was not caused by deep sleep: %d\n",wakeup_reason); break;
+  }
+}
+
+/* ********************** SEND DATA *********************** */
 void sendData(String mqtt_payload)
 {
-    char payload[500];
+    char payload[3072];
     mqtt_payload.toCharArray(payload, (mqtt_payload.length() + 1));
-    reconnect();
+    if (!mqtt.connected())
+    {
+        reconnect();
+    }
+    //reconnect();
     mqtt.publish(topicPublish, payload);
     Serial.println("------>");
     Serial.println(mqtt_payload);
@@ -398,13 +436,22 @@ void overview()
     Average<float> pay_load(300);
 
     // variables
-    int min_index = 0;
-    int max_index = 0;
+    int min_load_index = 0;
+    int max_load_index = 0;
+
+    int min_pos_index = 0;
+    int max_pos_index = 0;
 
     int counter = 0;
 
     while (task == '3')
     {
+        if (!mqtt.connected())
+        {
+            reconnect();
+        }
+        mqtt.loop();
+
         // CHECK KEYBOARD TO CHANGE MENU
         
         if (Serial.available() > 0)
@@ -465,6 +512,8 @@ void overview()
         {
             count = 0;
             backgorund();
+            Serial.println("end points");
+            break;
         }
 
         count++;
@@ -473,46 +522,60 @@ void overview()
     }
 
     // PROCESS
-    peakLoad = pay_load.maximum(&max_index);
-    minLoad = pay_load.minimum(&min_index);
-    SPM = (60*4)/float(counter);
 
-    valueOverview(peakLoad, 24, 4);
-    valueOverview(minLoad, 24, 5);
-    valueOverview(SPM, 24, 7);
-    Serial.println(peakLoad);
-    Serial.println(minLoad);
-    Serial.println(SPM);
-    Serial.println(counter);
+    maxPos = pay_pos.maximum(&max_pos_index);
+    minPos = pay_pos.minimum(&min_pos_index);
 
-    String mqtt_payload = "{\"Well\":\"" + wellName + "\",\"idT\":" + String(idT) + ",\"Data\":[" + String(peakLoad, 2) + "," + String(minLoad, 2) + "," + String(pumpFill, 2) + "," + String(SPM, 2) + "]}";
-    sendData(mqtt_payload);
+    // DETECT ROD PUMP STOPPED
+    if(abs(maxPos - minPos) <= 0.1*length){
+        String mqtt_payload = "{\"Well\":\"" + wellName + "\",\"idT\":" + String(idT) + ",\"Data\":\"stopped\"}";
+        sendData(mqtt_payload);
+    }else{
+        peakLoad = pay_load.maximum(&max_load_index);
+        minLoad = pay_load.minimum(&min_load_index);
+        SPM = (60*4)/float(counter);
 
-    String rawdata = "";
-    
-    for (int i = 0; i < counter; i++)
-    {
-        rawdata += String(pay_pos.get(i), 3) + ",";
-    }
-    mqtt_payload = "{\"Well\":\"" + wellName + "\",\"idT\":" + String(idT) + ",\"pos\":\"" + rawdata + "\"}";
-    sendData(mqtt_payload);
-    /*
-    for (int i = 0; i < counter; i++)
-    {
-        rawdata += String(pay_load.get(i), 3) + ",";
-    }
-    */
-    mqtt_payload = "{\"Well\":\"" + wellName + "\",\"idT\":" + String(idT) + ",\"pos\":\"" + rawdata + "\"}";
-    sendData(mqtt_payload);
+        valueOverview(peakLoad, 24, 4);
+        valueOverview(minLoad, 24, 5);
+        valueOverview(SPM, 24, 7);
+        Serial.println(peakLoad);
+        Serial.println(minLoad);
+        Serial.println(SPM);
+        Serial.println(counter);
+
+        String mqtt_payload = "{\"Well\":\"" + wellName + "\",\"idT\":" + String(idT) + ",\"Data\":[" + String(peakLoad, 2) + "," + String(minLoad, 2) + "," + String(pumpFill, 2) + "," + String(SPM, 2) + "]}";
+        sendData(mqtt_payload);
+
+        String rawdata = "";
+        
+        for (int i = 0; i < counter-1; i++)
+        {
+            rawdata += String(pay_pos.get(i), 3) + ",";
+        }
+        rawdata += String(pay_pos.get(counter-1), 3);
+        mqtt_payload = "{\"Well\":\"" + wellName + "\",\"idT\":" + String(idT) + ",\"pos\":\"" + rawdata + "\"}";
+        //Serial.println(mqtt_payload);
+        sendData(mqtt_payload);
+        
+        rawdata = "";
+        for (int i = 0; i < counter-1; i++)
+        {
+            rawdata += String(pay_load.get(i), 3) + ",";
+        }
+        rawdata += String(pay_load.get(counter-1), 3);
+        mqtt_payload = "{\"Well\":\"" + wellName + "\",\"idT\":" + String(idT) + ",\"load\":\"" + rawdata + "\"}";
+        sendData(mqtt_payload);
     
     // String mqtt_payload = "{\"Id\":\"" + wellName + "\",\"DataProcess\":[" + String(peakLoad,2) + "," + String(minLoad,2) + "," + String(pumpFill,2) + "," + String(SPM,2) + "],\"pos\":\"" + mqtt_pos + "\",\"load\":\"" + mqtt_load + "}";
-
+    }
     idT++;
 
     // valueOverview(currentLoad, 56, 2);
     //  delay(50);
     // valueOverview(currentPos, 56, 3);
     //  delay(50);
+    Serial.flush(); 
+    esp_deep_sleep_start();
 }
 
 /* ******************* RECONNECT  ********************** */
@@ -523,11 +586,11 @@ void reconnect()
     {
         Serial.print("Attempting MQTT connection...");
 
-        if (mqtt.connect(mqtt_id, mqtt_user, mqtt_pass))
+        if (mqtt.connect(mqtt_id, mqtt_user, mqtt_pass, topicPublish, 0, false, "Device conected"))
         //if (mqtt.connect(mqtt_id))
         {
             mqtt.subscribe(topicSubscribe);
-            mqtt.publish(topicPublish, "Connect");
+            //mqtt.publish(topicPublish, "Connect");
         }
         else
         {
@@ -588,21 +651,28 @@ void setup()
     mqtt.setCallback(mqttCallback);
 
     /* **************** INIT AND SET RTC ********************* */
+    reconnect();
+    /*
     if (mqtt.connect(mqtt_id, mqtt_user, mqtt_pass))
     {
         mqtt.publish(topicPublish, "start");
         mqtt.subscribe(topicSubscribe);
     }
+    */
+
+   print_wakeup_reason();
+   esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
 }
 
 void loop()
 {
+    /*
     if (!mqtt.connected())
     {
         reconnect();
     }
-
-    mqtt.loop();
+    */
+    //mqtt.loop();
 
     if (Serial.available() > 0)
     {
