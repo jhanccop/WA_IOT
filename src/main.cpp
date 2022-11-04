@@ -7,9 +7,14 @@ UBM analyzer version for unipetro abc
 /* ====================== DEEP SLEEP CONFIG ======================== */
 
 #define uS_TO_S_FACTOR 1000000
-#define TIME_TO_SLEEP  120
+int TIME_TO_SLEEP = 120;
 
 RTC_DATA_ATTR int idT = 0;
+RTC_DATA_ATTR String RTCdateTime = "";
+//RTC_DATA_ATTR int idT = 0;
+//RTC_DATA_ATTR int idT = 0;
+//RTC_DATA_ATTR int idT = 0;
+//RTC_DATA_ATTR int idT = 0;
 
 /* ====================== LCD CONFIG ======================== */
 #define _Digole_Serial_I2C_
@@ -39,8 +44,10 @@ const char *mqtt_id = "gle_client_234";
 const char *mqtt_user = "gle";
 const char *mqtt_pass = "glettxx";
 
-const char *topicSubscribe = "oilAIOT/setting/#";
-const char *topicPublish = "oilAIOT/data";
+String topicSubscribe = "jphOandG/";
+
+//const char *topicSubscribe = "oilAIOT/field/Well01";
+const char *topicPublish = "jphOandG/data";
 
 /* ========================== TOOLS ========================== */
 #include <Average.h>
@@ -211,18 +218,68 @@ float length = 1;
 
 void mqttCallback(char *topic, byte *payload, unsigned int length);
 void reconnect();
+void printDatetime(String datetime);
+void valueOverviewDiagnosis(String value, int pos_x, int pos_y);
+void valueOverview(float value, int pos_x, int pos_y);
+void plotOverviewDownHole(float pos, float load);
 
 void mqttCallback(char *topic, byte *payload, unsigned int length)
 {
+    Serial.println("date endedd****************");
 
-    StaticJsonDocument<200> doc;
-
-    String json = "";
-    for (int i = 0; i < length; i++)
-    {
-        json += String((char)payload[i]);
+    if(String(topic) == topicSubscribe  + wellName + "/config"){
+        TIME_TO_SLEEP = 150;
     }
-    Serial.println(json);
+
+    Serial.println(String(topic));
+
+    if(String(topic) == topicSubscribe + wellName + "/data"){
+    
+        DynamicJsonDocument doc(8000);
+
+        String json = "";
+        for (int i = 0; i < length; i++)
+        {
+            json += String((char)payload[i]);
+        }
+
+        DeserializationError error = deserializeJson(doc, json);
+
+        if (error) {
+            Serial.print("deserializeJson() failed: ");
+            Serial.println(error.c_str());
+            return;
+        }
+   
+        const char* well = doc["well"];
+        Serial.println(well);
+        const char* DT = doc["DT"];
+        RTCdateTime = String(DT);
+        printDatetime(DT);
+
+        const char* diagnosis = doc["diagnosis"];
+        valueOverviewDiagnosis(diagnosis, 15, 9);
+
+        int fillPump = doc["fillPump"];
+        valueOverview(fillPump, 24, 6);
+
+        const char* downChart_pos = doc["downChart"]["pos"];
+        const char* downChart_load = doc["downChart"]["load"];
+
+        int numberData = s.separa(downChart_pos, ',', 0).toInt();
+
+        Serial.println(numberData);
+
+        for(int i = 1; i <= numberData; i++){
+            float posDown = s.separa(downChart_pos, ',', i).toFloat();
+            float loadDown = s.separa(downChart_load, ',', i).toFloat();
+            plotOverviewDownHole(posDown, loadDown);
+        }
+        
+        Serial.flush(); 
+        esp_deep_sleep_start();
+
+    }
 }
 
 /* ********************** WAKEUP REASON *********************** */
@@ -248,14 +305,17 @@ void sendData(String mqtt_payload)
 {
     char payload[3072];
     mqtt_payload.toCharArray(payload, (mqtt_payload.length() + 1));
+
     if (!mqtt.connected())
     {
         reconnect();
     }
+    mqtt.loop();
     //reconnect();
     mqtt.publish(topicPublish, payload);
-    Serial.println("------>");
-    Serial.println(mqtt_payload);
+    Serial.println("------> sended data");
+    delay(1000);
+    //Serial.println(mqtt_payload);
 }
 
 /* ********************** RESET POSITION *********************** */
@@ -284,6 +344,14 @@ void lcd_prepare(void)
     // mydisp.drawStr(0, 0, "RPC ANALYZER v1");
     // mydisp.drawStr(20, 2, "SPM:");
     // mydisp.drawLine(0, 6, 127, 6);
+}
+
+/* ******************* PRINT DATETIME  ********************** */
+void printDatetime(String datetime)
+{
+    mydisp.setFont(fonts[0]);
+    mydisp.setPrintPos(16, 0, _TEXT_);
+    mydisp.print(datetime);
 }
 
 /* ******************* PRINT DATETIME  ********************** */
@@ -365,18 +433,31 @@ void valueOverview(float value, int pos_x, int pos_y)
     // delay(25);
 }
 
+void valueOverviewDiagnosis(String value, int pos_x, int pos_y)
+{
+    mydisp.setPrintPos(pos_x, pos_y, _TEXT_);
+    delay(50);
+    mydisp.print("           ");
+
+    mydisp.setPrintPos(pos_x, pos_y, _TEXT_);
+    delay(50);
+    mydisp.print(value);
+    // delay(25);
+}
+
 void backgorund()
 {
     mydisp.clearScreen();
     mydisp.setFont(fonts[0]);
 
     // Title
-    mydisp.drawStr(18, 0, "3. REAL TIME");
+    //mydisp.drawStr(18, 0, "3. REAL TIME");
     mydisp.drawHLine(65, 6, 62);
 
     // print datetime
-    print_datetime(true);
 
+    //print_datetime(true);
+    printDatetime(RTCdateTime);
     // print box dynachart
     mydisp.drawHLine(0, 63, 65);
     mydisp.drawVLine(0, 0, 63);
@@ -411,14 +492,17 @@ void backgorund()
 /* ************************* LCD 3 OVERVIEW REAL TIME ************************ */
 /* *************************************************************************** */
 
-void plotOverview(float pos, float load, float pos_pump, float load_pump)
+void plotOverview(float pos, float load)
 {
     int x_surf = map(pos * 100, 0, 100, 5, 60);
     int y_surf = map(load * 100, 0, 100, 30, 2);
     mydisp.drawPixel(x_surf, y_surf);
+}
 
-    int x_pump = map(pos_pump * 100, 0, 100, 5, 60);
-    int y_pump = map(load_pump * 100, 0, 100, 61, 33);
+void plotOverviewDownHole(float pos, float load)
+{
+    int x_pump = map(pos * 100, 0, 100, 5, 60);
+    int y_pump = map(load * 100, 0, 100, 61, 33);
     mydisp.drawPixel(x_pump, y_pump);
 }
 
@@ -496,10 +580,10 @@ void overview()
                 Serial.println("overview");
             }
 
-            float pos_pump = currentPos;
-            float load_pump = currentLoad;
+            //float pos_pump = currentPos;
+            //float load_pump = currentLoad;
 
-            plotOverview(currentPos, currentLoad, pos_pump, load_pump);
+            plotOverview(currentPos, currentLoad);
 
             counter++;
 
@@ -518,7 +602,7 @@ void overview()
 
         count++;
 
-        delay(150);
+        delay(50);
     }
 
     // PROCESS
@@ -543,7 +627,7 @@ void overview()
         Serial.println(SPM);
         Serial.println(counter);
 
-        String mqtt_payload = "{\"Well\":\"" + wellName + "\",\"idT\":" + String(idT) + ",\"Data\":[" + String(peakLoad, 2) + "," + String(minLoad, 2) + "," + String(pumpFill, 2) + "," + String(SPM, 2) + "]}";
+        String mqtt_payload = "{\"Well\":\"" + wellName + "\",\"idT\":" + String(idT) + ",\"Data\":[" + String(peakLoad, 2) + "," + String(minLoad, 2) + "," + String(SPM, 2) + "]}";
         sendData(mqtt_payload);
 
         String rawdata = "";
@@ -564,18 +648,27 @@ void overview()
         }
         rawdata += String(pay_load.get(counter-1), 3);
         mqtt_payload = "{\"Well\":\"" + wellName + "\",\"idT\":" + String(idT) + ",\"load\":\"" + rawdata + "\"}";
+        
         sendData(mqtt_payload);
+        
     
     // String mqtt_payload = "{\"Id\":\"" + wellName + "\",\"DataProcess\":[" + String(peakLoad,2) + "," + String(minLoad,2) + "," + String(pumpFill,2) + "," + String(SPM,2) + "],\"pos\":\"" + mqtt_pos + "\",\"load\":\"" + mqtt_load + "}";
     }
     idT++;
 
+    while(1){
+        if (!mqtt.connected())
+        {
+            reconnect();
+        }
+        mqtt.loop();
+    }
+
     // valueOverview(currentLoad, 56, 2);
     //  delay(50);
     // valueOverview(currentPos, 56, 3);
     //  delay(50);
-    Serial.flush(); 
-    esp_deep_sleep_start();
+    
 }
 
 /* ******************* RECONNECT  ********************** */
@@ -589,7 +682,18 @@ void reconnect()
         if (mqtt.connect(mqtt_id, mqtt_user, mqtt_pass, topicPublish, 0, false, "Device conected"))
         //if (mqtt.connect(mqtt_id))
         {
-            mqtt.subscribe(topicSubscribe);
+            char topic1[25];
+            String topicSubscribe1 = topicSubscribe + wellName + "/data";
+            topicSubscribe1.toCharArray(topic1, (topicSubscribe1.length() + 1));
+            mqtt.subscribe(topic1);
+
+            delay(1000);
+            char topic2[25];
+            String topicSubscribe2 = topicSubscribe + wellName + "/config";
+            topicSubscribe2.toCharArray(topic2, (topicSubscribe2.length() + 1));
+            mqtt.subscribe(topic2);
+
+            Serial.println(topicSubscribe1);
             //mqtt.publish(topicPublish, "Connect");
         }
         else
@@ -662,6 +766,7 @@ void setup()
 
    print_wakeup_reason();
    esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+   overview();
 }
 
 void loop()
@@ -696,7 +801,7 @@ void loop()
         break;
     case '3':
         Serial.println("task 3");
-        overview();
+        
         break;
     default:
         Serial.println("Default");
