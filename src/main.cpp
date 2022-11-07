@@ -7,7 +7,7 @@ UBM analyzer version for unipetro abc
 /* ====================== DEEP SLEEP CONFIG ======================== */
 
 #define uS_TO_S_FACTOR 1000000
-int TIME_TO_SLEEP = 300;
+int TIME_TO_SLEEP = 300; // 5 minutes sleep
 
 RTC_DATA_ATTR int idT = 0;
 RTC_DATA_ATTR String RTCdateTime = "";
@@ -853,7 +853,6 @@ void loop()
         break;
     case '3':
         Serial.println("task 3");
-
         break;
     default:
         Serial.println("Default");
