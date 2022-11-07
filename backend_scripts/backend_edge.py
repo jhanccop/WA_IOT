@@ -19,43 +19,112 @@ import paho.mqtt.client as mqtt
 from datetime import datetime
 import time
 
+import cv2
+import matplotlib.pyplot as plt
+import tensorflow as tf
+from tensorflow import keras
+
 import numpy as np
 
 broker = 'broker.hivemq.com'
 port = 1883
 topic = 'jphOandG/#'
 topic_pub = 'jphOandG/'
-client_id = 'edge2094390'
+client_id = 'edge20221111'
 username = 'gle'
 password = 'glettxx'
 
 data = {}
+
+dict_targets = {
+    0:'Full pump',
+    1:'Leak travel valve',
+    2:'Leak standing valve',
+    3:'Worn pump barrel',
+    4:'Light fluid stroke',
+    5:'Medium fluid stroke',
+    6:'Severe fluid stroke',
+    7:'Gas interference',
+    8:'Shock of pump up',
+    9:'Shock of pump down'
+}
+
+dict_recomendation = {
+    0:'Good work area',
+    1:'Schedule to workover',
+    2:'Schedule to workover',
+    3:'Schedule to workover',
+    4:'Good work area',
+    5:'Reduce strokes per minute',
+    6:'Reduce strokes per minute',
+    7:'Apply gle eliminator',
+    8:'Unit re-spacing',
+    9:'Unit re-spacing'
+}
 
 def config():
     pass
 
 # ------------------ PROCCESS --------------
 
+def preproccesing(pos,load):
+    Linewidth = 15
+    plt.clf()
+    plt.plot(pos,load, linewidth = Linewidth, color='black')
+    plt.axis('off')
+    plt.subplots_adjust(left=0.01, right=1, top=1, bottom=0.01)
+
+    file = 'image.png'
+
+    plt.savefig(file)
+
+    img = cv2.imread(file)
+    img = cv2.resize(img, (50,50))
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    img = img.clip(max=1)
+    img = 1-img
+    return img
+
 def downChart(pos, load):
 
-    array_pos = np.fromstring(pos, dtype=float, sep=',')
-    array_load = np.fromstring(load, dtype=float, sep=',')
+    #array_pos = np.fromstring(pos, dtype=float, sep=',')
+    #array_load = np.fromstring(load, dtype=float, sep=',')
+    pos_s = ','.join(str(x) for x in pos)
+    load_s = ','.join(str(x) for x in load)
 
-    pos = str(len(array_pos)) + "," + pos
-    load = str(len(array_load)) + "," + load
+    pos = str(len(pos)) + "," + pos_s
+    load = str(len(load)) + "," + load_s
 
 
-    fillage = {"pos":pos, "load":load}
-
-    return fillage
+    DownChar = {"pos":pos,"load":load}
+    #print(DownChar)
+    return DownChar
 
 def diagnosis(pos, load):
-    Diagnosis = "FLUID STROKE"
-    return Diagnosis
+    diagnosis_model = keras.models.load_model('CNN_regresion.h5')
+    X = preproccesing(pos,load)
+    value = diagnosis_model.predict(X.reshape([1, 50,50]))
+
+    threshold, upper, lower = 0.6, 1, 0
+    pred = np.where(value>threshold, upper, lower)
+    pred = pred.flatten()
+    index = np.where(pred==1)
+    Diagnosis = [ dict_targets[int(i)] for i in index[0]]
+    raw_diagnosis = str(Diagnosis).replace("[","").replace("]","").replace("'","")
+    raw_diagnosis
+
+    print("DIAGNOSISI ----->", raw_diagnosis)
+
+    return raw_diagnosis
 
 def fillPump(pos, load):
-    fillage = 60
-    return fillage
+
+    fill_model = keras.models.load_model('fill_model.h5')
+    X = preproccesing(pos,load)
+    fill = fill_model.predict(np.expand_dims(X, axis=0))
+    print("FILL ---->",fill[0][0])
+    return int(fill[0][0])
 
 def productionToday(well,FillPump,SPM):
     production = 23
@@ -79,11 +148,20 @@ def sendData(well,payload):
 def proccess(well,data_proccess):
     #print(well,raw_data)
     #well = well
-    pos = data_proccess["pos"]
-    load = data_proccess["load"]
+    pos_s = data_proccess["pos"]
+    load_s = data_proccess["load"]
 
-    print("*********")
-    print(pos,load)
+    pos = [float(x) for x in pos_s.split(",")]
+    load = [float(x) for x in load_s.split(",")]
+
+    pos = np.array(pos)
+    load = np.array(load)
+
+
+    #print("*********")
+    #print(pos, type(pos))
+    #print(load)
+
 
     dt = datetime.now()
     local_dt = dt.strftime("%Y-%m-%d %H:%M")
@@ -106,6 +184,7 @@ def proccess(well,data_proccess):
         "runTime":RunTime,
         "productionToday":ProductionToday
         }
+    print(dictPayload)
 
     payload = json.dumps(dictPayload)
 
@@ -158,6 +237,7 @@ def on_message(client, userdata, message):
                 #print(m_mqtt["load"])
             else:
                 print("default")
+                return 0
             
             if "data" and "pos" and "load" in data[m_mqtt["Well"]]:
                 print("proccessssss")
