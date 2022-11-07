@@ -7,7 +7,7 @@ UBM analyzer version for unipetro abc
 /* ====================== DEEP SLEEP CONFIG ======================== */
 
 #define uS_TO_S_FACTOR 1000000
-int TIME_TO_SLEEP = 120;
+int TIME_TO_SLEEP = 300;
 
 RTC_DATA_ATTR int idT = 0;
 RTC_DATA_ATTR String RTCdateTime = "";
